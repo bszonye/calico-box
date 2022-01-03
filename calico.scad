@@ -53,7 +53,7 @@ inch = 25.4;
 
 // box metrics
 interior = [231, 231, 67.5];  // box interior
-module interior(a=45, center=false) {
+module interior(a=0, center=false) {
     origin = [0, 0, center ? 0 : interior[2]/2];
     translate(origin) rotate(a) cube(interior, center=true);
 }
@@ -67,9 +67,10 @@ Rhex = 3/4 * 25.4;  // hex major radius (center to vertex)
 
 
 // container metrics
-Hlid = 3.2;  // total height of lid + plug
-Rlid = 1+wall0;  // offset radius from contents to outer lid/box edge
-Rplug = 1-gap0;  // offset radius from contents to lid plug
+Hlid = clayer(4);  // total height of lid + plug
+Rspace = 1;  // space between contents and box (sides + lid)
+Rlid = Rspace+wall0;  // offset radius from contents to outer lid/box edge
+Rplug = Rspace-gap0;  // offset radius from contents to lid plug
 Alid = 30;  // angle of lid chamfer
 Hplug = Hlid - floor0;  // depth of lid below cap
 Hseam = wall0/2 * tan(Alid) - zlayer(1/2);  // space between lid cap and box
@@ -102,10 +103,10 @@ module hex_lid(grid=Ghex, center=false) {
         }
     }
 }
+function hex_box_height(n=1, lid=false) =
+    clayer(floor0 + n*Hboard + Rspace + Hplug) + (lid ? Hplug : 0);
 module hex_box(n=1, lid=false, grid=Ghex, center=false) {
-    h0 = Hboard * n + floor0;
-    h = clayer(h0 + Hplug);
-    // TODO: center z-axis
+    h = hex_box_height(n=n, lid=false);
     origin = center ? [0, 0] : -hex_min(grid) + [1, 1] * Rlid;
     translate(origin) {
         difference() {
@@ -134,15 +135,27 @@ module tile_hex_lid(center=false) {
 }
 
 module raise_lid(n=1, k=1, lid=false) {
-    raise(k*(Hlid+Hseam) + n*Hboard + (lid?Hplug:0)) children();
+    h = k * (hex_box_height(n) + Hseam) + (lid ? Hplug : 0);
+    raise(h) children();
 }
 
 union() {
     %interior();
-    ntiles = 6;
-    k = Nplayers+1;
-    for (i=[0:k-1]) {
-        raise_lid(n=i*ntiles, k=i, lid=true) tile_hex_box(ntiles, lid=true);
+    trough = (interior[1]-mat[1]);
+    translate([0, -trough/2, Hmats/2])
+        cube([mat[0], mat[1], Hmats], center=true);
+
+    side = sin(60)*Rhex + Rlid;
+    translate([0, interior[1]/2-trough/2, side]) rotate([90, 0,  90]) {
+        ntiles = 6;
+        k = Nplayers+1;
+        for (i=[0:k-1]) {
+            raise_lid(n=ntiles, k=i, lid=true)
+                tile_hex_box(ntiles, lid=true, center=true);
+        }
+        raise_lid(n=ntiles, k=k, lid=true) tile_hex_lid(center=true);
     }
-    raise_lid(n=k*ntiles, k=k, lid=true) tile_hex_lid();
 }
+
+*raise_lid(0, 0, true) tile_hex_lid(center=true);
+*raise_lid(0, 0, true) tile_hex_box(6, lid=true, center=true);
