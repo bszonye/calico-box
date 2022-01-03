@@ -60,19 +60,24 @@ module interior(a=0, center=false) {
 
 // component metrics
 Nplayers = 4;  // number of players, mats, design goal sets
+Ntiles = 6;  // number of tiles per set
 mat = [228, 184, 4.9];  // dual-layer mat dimensions (approx. 9in x 7.25in)
 Hmats = Nplayers * mat[2];  // height of stacked mats
 Hboard = 2.6;  // tile & token thickness
+Hmanual = 0.9;  // approximate
+Hroom = interior[2] - Hmats - Hmanual;
+Hlayer = floor(Hroom / 2);
 Rhex = 3/4 * 25.4;  // hex major radius (center to vertex)
 
 
 // container metrics
-Hlid = clayer(4);  // total height of lid + plug
+Hcap = clayer(4);  // total height of lid + plug
+Hlid = floor0;  // height of cap lid
+Hplug = Hcap - Hlid;  // depth of lid below cap
 Rspace = 1;  // space between contents and box (sides + lid)
 Rlid = Rspace+wall0;  // offset radius from contents to outer lid/box edge
 Rplug = Rspace-gap0;  // offset radius from contents to lid plug
 Alid = 30;  // angle of lid chamfer
-Hplug = Hlid - floor0;  // depth of lid below cap
 Hseam = wall0/2 * tan(Alid) - zlayer(1/2);  // space between lid cap and box
 Hchamfer = (Rlid-Rplug) * tan(Alid);
 
@@ -94,7 +99,7 @@ module hex_lid(grid=Ghex, center=false) {
     origin = center ? [0, 0, 0] : [Rlid - xy_min[0], Rlid - xy_min[1], 0];
     translate(origin) {
         minkowski() {
-            linear_extrude(floor0, center=false)
+            linear_extrude(Hlid, center=false)
                 hex_poly(grid=grid, center=true);
             mirror([0, 0, 1]) {
                 cylinder(h=Hplug, r=Rplug);
@@ -103,59 +108,139 @@ module hex_lid(grid=Ghex, center=false) {
         }
     }
 }
-function hex_box_height(n=1, lid=false) =
-    clayer(floor0 + n*Hboard + Rspace + Hplug) + (lid ? Hplug : 0);
-module hex_box(n=1, lid=false, grid=Ghex, center=false) {
-    h = hex_box_height(n=n, lid=false);
+
+function hex_box_height(n=1, plug=false) =
+    clayer(floor0 + n*Hboard + Rspace + Hplug) + (plug ? Hplug : 0);
+function stack_height(k=1, n=Ntiles, plug=true, lid=true) =
+    k*hex_box_height(n) +
+    (k-1)*clayer(Hseam) +
+    (plug ? Hplug : 0) +
+    (lid ? clayer(Hseam) + Hlid : 0);
+
+module hex_box(n=1, plug=false, grid=Ghex, center=false) {
+    h = hex_box_height(n=n, plug=false);
     origin = center ? [0, 0] : -hex_min(grid) + [1, 1] * Rlid;
     translate(origin) {
         difference() {
             // exterior
-            linear_extrude(h, center=false)
-                offset(r=Rlid) hex_poly(grid=grid, center=true);
+            union() {
+                linear_extrude(h, center=false)
+                    offset(r=Rlid) hex_poly(grid=grid, center=true);
+                if (plug) hex_lid(grid=grid, center=true);
+            }
             // interior
             raise() linear_extrude(h, center=false)
                 offset(r=Rlid-wall0) hex_poly(grid=grid, center=true);
             // lid chamfer
             raise(h+Hseam) hex_lid(grid=grid, center=true);
         }
-        // create lid bottom
-        if (lid) hex_lid(grid=grid, center=true);
         // ghost tiles
         %raise(floor0 + Hboard * n/2)
             hex_tile(n=n, grid=grid, center=true);
     }
 }
+module raise_lid(k=1, n=Ntiles, plug=true) {
+    h = k * (hex_box_height(n) + clayer(Hseam)) + (plug ? Hplug : 0);
+    raise(stack_height(k=k, n=n, plug=plug, lid=true) - Hlid) children();
+}
 
-module tile_hex_box(n=1, lid=false, center=false) {
-    hex_box(n=n, lid=lid, grid=Ghex, center=center);
+module tile_hex_box(n=Ntiles, plug=true, center=false) {
+    hex_box(n=n, plug=plug, grid=Ghex, center=center);
 }
 module tile_hex_lid(center=false) {
     hex_lid(grid=Ghex, center=center);
 }
 
-module raise_lid(n=1, k=1, lid=false) {
-    h = k * (hex_box_height(n) + Hseam) + (lid ? Hplug : 0);
-    raise(h) children();
-}
+xstack = [stack_height(Nplayers+1), 2*(sin(60)*Rhex+Rlid), 2*(Rhex+Rlid)];
 
-union() {
-    %interior();
-    trough = (interior[1]-mat[1]);
-    translate([0, -trough/2, Hmats/2])
-        cube([mat[0], mat[1], Hmats], center=true);
-
-    side = sin(60)*Rhex + Rlid;
-    translate([0, interior[1]/2-trough/2, side]) rotate([90, 0,  90]) {
-        ntiles = 6;
-        k = Nplayers+1;
-        for (i=[0:k-1]) {
-            raise_lid(n=ntiles, k=i, lid=true)
-                tile_hex_box(ntiles, lid=true, center=true);
+module hex_box_tray(center=false) {
+    margin = 1;
+    wall = margin + wall0;
+    function align(x) = ceil(x+2*wall0+1) - 2*wall;
+    tray = [align(xstack[0]), align(xstack[1])];
+    rise = floor(xstack[2] * 3/4);
+    cut = (tray[0]+2*wall) / 4;
+    difference() {
+        linear_extrude(rise) offset(r=margin+wall0)
+            square(tray, center=center);
+        raise() linear_extrude(rise) offset(r=margin)
+            square(tray, center=center);
+        raise(floor0+xstack[2]/2) {
+            raise(rise/2) cube([2*xstack[0], cut, rise], center=true);
+            rotate([0, 90, 0]) cylinder(d=cut, h=2*xstack[0], center=true);
         }
-        raise_lid(n=ntiles, k=k, lid=true) tile_hex_lid(center=true);
+        for (x=[-1.25, 0, 1.25]) translate([x*cut, 0])
+            cylinder(d=cut, h=3*floor0, center=true);
     }
 }
 
-*raise_lid(0, 0, true) tile_hex_lid(center=true);
-*raise_lid(0, 0, true) tile_hex_box(6, lid=true, center=true);
+ctile = [90.1, 56.2];
+ctile_radius = 1.6;
+ctile_pattern = [18, 47];  // distance from top center to pattern notch
+
+module cat_tile_outline(center=false) {
+    origin = center ? [0, 0] : ctile/2;
+    translate(origin) {
+        inset = ctile - [2*ctile_radius, 2*ctile_radius];
+        xhex = ctile_pattern[0];
+        yhex = Rhex - ctile[1]/2 + ctile_pattern[1];
+        difference() {
+            offset(r=ctile_radius) square(inset, center=true);
+            for (i=[-1,1])
+                translate([i*xhex, -yhex]) rotate(90) hex_poly(center=true);
+        }
+    }
+}
+module cat_tile(center=false) {
+    linear_extrude(Hboard) cat_tile_outline(center=center);
+}
+module cat_tile_box(center=false) {
+    hrecess = ceil(Hboard);  // depth of cat tile recess
+    hshelf = Hlayer-hrecess;
+    width = (interior[1]-1) / 4;
+    gap = (width - ctile[1]) / 2 + gap0;
+    wall = gap + wall0;
+    foot = [ctile[0] + 2*wall, width];
+    %translate([0, 0, hshelf]) cat_tile(center=center);
+    radius = gap + ctile_radius;
+    inset = foot - [2*radius, 2*radius];
+    echo(radius, inset, foot);
+    origin = center ? [0, 0] : foot/2;
+    translate(origin) {
+        difference() {
+            linear_extrude(Hlayer) offset(r=radius)
+                square(inset, center=true);
+            raise() linear_extrude(Hlayer) offset(r=radius-wall0)
+                square(inset, center=true);
+            raise(hshelf) linear_extrude(2*hrecess)
+                offset(r=gap) cat_tile_outline(center=true);
+        }
+        raise(hshelf/2) cube([wall0, foot[1], hshelf], center=true);
+    }
+}
+
+cat_tile_box(center=true);
+
+// complete organizer
+*union() {
+    %interior();
+    translate([0, mat[1]-interior[1], Hmats]/2)
+        cube([mat[0], mat[1], Hmats], center=true);
+
+    translate([interior[0]/4, mat[1]/2, 0]) {
+        color("purple") hex_box_tray(center=true);
+        // stack of hex boxes
+        raise(floor0+xstack[2]/2) rotate([0, 90, 0]) raise(-xstack[0]/2) {
+            colors = ["darkviolet", "blue", "green", "yellow", "black"];
+            for (i=[0:Nplayers]) {
+                raise_lid(i) color(colors[i]) tile_hex_box(center=true);
+            }
+            color("black") raise_lid(Nplayers+1) tile_hex_lid(center=true);
+        }
+    }
+}
+
+// single objects
+*raise_lid(0, 0) tile_hex_lid(center=true);
+*raise_lid(0, 0) tile_hex_box(center=true);
+*hex_box_tray(center=true);
