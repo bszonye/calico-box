@@ -195,27 +195,59 @@ module cat_tile(center=false) {
     linear_extrude(Hboard) cat_tile_outline(center=center);
 }
 module cat_tile_box(center=false) {
-    hrecess = ceil(Hboard);  // depth of cat tile recess
+    hrecess = clayer(Hboard+gap0);  // depth of cat tile recess
     hshelf = Hlayer-hrecess;
-    width = (interior[1]-1) / 4;
+    wshelf = 3.2;
+    width = floor((interior[1]-1) / 4);
     gap = (width - ctile[1]) / 2 + gap0;
     wall = gap + wall0;
     foot = [ctile[0] + 2*wall, width];
-    %translate([0, 0, hshelf]) cat_tile(center=center);
-    radius = gap + ctile_radius;
+    *translate([0, 0, hshelf]) cat_tile(center=center);
+    radius = wall + ctile_radius;
     inset = foot - [2*radius, 2*radius];
     echo(radius, inset, foot);
     origin = center ? [0, 0] : foot/2;
+    module shelf(length, width=wshelf) {
+        poly = [[0, 0], [-width, 0], [-width, -floor0], [0, -floor0-width]];
+        rotate([90, 0, 0]) linear_extrude(length, center=true) polygon(poly);
+    }
     translate(origin) {
+        // box
         difference() {
+            linear_extrude(hshelf) offset(r=radius)
+                square(inset, center=true);
+            raise() linear_extrude(hshelf) offset(r=radius-wall0)
+                square(inset, center=true);
+        }
+        // divider
+        raise(hshelf/2) cube([wall0, foot[1], hshelf], center=true);
+        // shelf & rails
+        intersection() {
             linear_extrude(Hlayer) offset(r=radius)
                 square(inset, center=true);
-            raise() linear_extrude(Hlayer) offset(r=radius-wall0)
-                square(inset, center=true);
-            raise(hshelf) linear_extrude(2*hrecess)
+            raise(hshelf) {
+                // shelf
+                translate([0, foot[1]/2]) rotate(90) shelf(foot[0]);
+                translate([0, -foot[1]/2]) rotate(-90) shelf(foot[0]);
+                translate([foot[0]/2, 0]) rotate(0) shelf(foot[0]);
+                translate([-foot[0]/2, 0]) rotate(180) shelf(foot[0]);
+                // rails
+                translate([foot[0]-wall0, 0]/2)
+                    cube([wall0, foot[1], 2*hrecess], center=true);
+                translate([wall0-foot[0], 0]/2)
+                    cube([wall0, foot[1], 2*hrecess], center=true);
+            }
+        }
+        // pattern notches
+        hrail = hrecess+floor0;
+        difference() {
+            raise(Hlayer - hrail/2) {
+                translate([0, wshelf-foot[1]]/2)
+                    cube([foot[0]-2*radius, wshelf, hrail], center=true);
+            }
+            linear_extrude(3*Hlayer, center=true)
                 offset(r=gap) cat_tile_outline(center=true);
         }
-        raise(hshelf/2) cube([wall0, foot[1], hshelf], center=true);
     }
 }
 
