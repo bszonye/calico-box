@@ -174,57 +174,76 @@ module hex_box_tray(center=false) {
     }
 }
 
-ctile = [90.1, 56.2];
-ctile_radius = 1.6;
-ctile_pattern = [18, 47];  // distance from top center to pattern notch
+ctile = [90.1, 56.2];  // cat tile footprint
+ctile_radius = 1.6;  // corner radius
+ctile_banner = 9;  // width of nameplate banner
+ctile_pattern = [18.5, 47];  // distance from top center to pattern notch
 
-module cat_tile_outline(center=false) {
+module cat_tile_outline(delta=0, tray=false, center=false) {
     origin = center ? [0, 0] : ctile/2;
-    translate(origin) {
-        inset = ctile - [2*ctile_radius, 2*ctile_radius];
-        xhex = ctile_pattern[0];
-        yhex = Rhex - ctile[1]/2 + ctile_pattern[1];
-        difference() {
-            offset(r=ctile_radius) square(inset, center=true);
-            for (i=[-1,1])
-                translate([i*xhex, -yhex]) rotate(90) hex_poly(center=true);
+    translate(origin) offset(delta=delta) {
+        if (tray) {  // tray cutout shape
+            xstrip = (ctile[0] - ctile_banner) / 2;
+            ystrip = (ctile[1] - ctile_banner) / 2;
+            translate([0, ystrip])
+                offset(r=ctile_radius) offset(r=-ctile_radius)
+                square([ctile[0], ctile_banner], center=true);
+            for (i=[-1,1]) translate([i*xstrip, -ctile_banner/4])
+                square([ctile_banner, ctile[1]-ctile_banner/2], center=true);
+        } else {
+            xhex = ctile_pattern[0];
+            yhex = Rhex - ctile[1]/2 + ctile_pattern[1];
+            difference() {
+                offset(r=ctile_radius) offset(r=-ctile_radius)
+                    square(ctile, center=true);
+                for (i=[-1,1]) translate([i*xhex, -yhex]) rotate(90)
+                    hex_poly(center=true);
+            }
         }
     }
 }
-module cat_tile(center=false) {
-    linear_extrude(Hboard) cat_tile_outline(center=center);
+module cat_tile(tray=false, center=false) {
+    linear_extrude(Hboard) cat_tile_outline(tray=tray, center=center);
 }
 module cat_tile_box(center=false) {
     hrecess = clayer(Hboard+gap0);  // depth of cat tile recess
     hshelf = Hlayer-hrecess;
     width = (interior[1]-1) / 4;
     lip = xwall(2);
-    gap = (width - lip - ctile[1]);
-    ytile = -lip/2-gap/2;
-    echo(gap);
-    wall = gap + wall0;
-    foot = [ctile[0] + 2*wall, width];
-    %translate([0, ytile, hshelf]) cat_tile(center=center);
-    radius = wall + ctile_radius;
-    echo(radius, foot);
+    gap = (width - lip - ctile[1]) / 2;
+    border = lip + gap;
+    foot = [ctile[0] + 2*border, width];
+    well = [(foot[0] - 3*wall0) / 2, (foot[1] - 2*wall0)];
+    *translate([0, -lip/2, hshelf]) cat_tile(tray=true, center=center);
+    *translate([0, -lip/2, hshelf]) cat_tile(center=center);
+    rext = border + ctile_radius;  // exterior corner radius
+    rint = rext - wall0 + 3.6;  // interior corner radius
+    echo(rext, rint, gap, foot);
     origin = center ? [0, 0] : foot/2;
-    corner = wall0;
-    // TODO: clean up bottom edge
-    // TODO: clean up messy code
     translate(origin) {
         // box
         difference() {
+            // shell
             linear_extrude(Hlayer)
-                offset(r=radius) offset(r=-radius)
+                offset(r=rext) offset(r=-rext)
                 square(foot, center=true);
-            raise() linear_extrude(Hlayer)
-                offset(r=radius+corner) offset(r=-radius-corner-wall0)
-                square(foot, center=true);
-            translate([0, ytile, hshelf]) linear_extrude(2*hrecess)
-                offset(r=gap) cat_tile_outline(center=true);
+            // interior
+            for (i=[-1,1]) translate([i*(well[0]+wall0)/2, 0, floor0])
+                linear_extrude(Hlayer)
+                offset(r=rint) offset(r=-rint) square(well, center=true);
+            // lip
+            translate([0, -lip/2, hshelf]) linear_extrude(2*hrecess)
+                cat_tile_outline(gap, tray=true, center=true);
+            // lip bevel
+            for (i=[-1,1])
+                translate([i*(foot[0]-wall0)/2, -foot[1]/2, hshelf])
+                rotate([0, -90, 0]) linear_extrude(2*wall0, center=true)
+                polygon([[0, 0], [0, wall0],
+                        [2*hrecess, wall0+2*hrecess], [2*hrecess, 0]]);
+            // tile notches
+            translate([0, -lip/2-gap, hshelf]) linear_extrude(2*hrecess)
+                cat_tile_outline(0.01, center=true);
         }
-        // divider
-        raise(hshelf/2) cube([wall0, foot[1], hshelf], center=true);
     }
 }
 
