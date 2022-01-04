@@ -260,16 +260,14 @@ module button_box(color=undef, center=false) {
     // token well dimensions (radial version)
     yside = 0;
     xside = well[0]/2 + wall0/2;
-    ytop = well[1]/2 + wall0/2;
-    xtop = ytop * tan(30);
+    yend = well[1]/2 + wall0/2;
+    xend = yend * tan(30);
     ymid = Rhex * sin(60);
     xmid = Rhex * cos(60);
-    echo([xside, yside], [xtop, ytop]);
     pside = [
-        [Rhex, 0], [xside, yside], [xside, ytop], [xtop, ytop], [xmid, ymid]
+        [Rhex, 0], [xside, yside], [xside, yend], [xend, yend], [xmid, ymid]
     ];
-    ptop = [[xmid, ymid], [xtop, ytop], [-xtop, ytop], [-xmid, ymid]];
-    function area(x, y) = (x-wall0) * (y-wall0);
+    pend = [[xmid, ymid], [xend, yend], [-xend, yend], [-xmid, ymid]];
 
     module well_poly(scale=[1,1]) {
         linear_extrude(Vblock[2])
@@ -283,9 +281,8 @@ module button_box(color=undef, center=false) {
         color(color) difference() {
             // shell
             linear_extrude(Vblock[2]) rounded_square(rext, foot);
-            // tile shelf
-            raise(Hshelf) linear_extrude(Vblock[2])
-                rounded_square(rint, well);
+            // scoring tile recess
+            raise(Hshelf) cylinder(Hrecess/sin(60), Rbighex, Rbighex+Hrecess);
             // token wells
             raise() {
                 well_poly() hex_poly(center=true);
@@ -293,8 +290,8 @@ module button_box(color=undef, center=false) {
                 well_poly([-1, +1]) polygon(pside);
                 well_poly([+1, -1]) polygon(pside);
                 well_poly([-1, -1]) polygon(pside);
-                well_poly([+1, +1]) polygon(ptop);
-                well_poly([+1, -1]) polygon(ptop);
+                well_poly([+1, +1]) polygon(pend);
+                well_poly([+1, -1]) polygon(pend);
             }
         }
     }
