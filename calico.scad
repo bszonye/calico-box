@@ -255,7 +255,7 @@ module button_box(color=undef, center=false) {
     foot = [Vblock[0], 2*Vblock[1]];
     rext = 2.7;  // match cat tile boxes
     rint = rext - wall0;
-    well = [foot[0]-wall0, foot[1]-wall0];
+    well = [foot[0]-2*wall0, foot[1]-2*wall0];
 
     // token well dimensions
     length = (well[0] - wall0) / 2;
