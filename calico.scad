@@ -257,36 +257,44 @@ module button_box(color=undef, center=false) {
     rint = rext - wall0;
     well = [foot[0]-2*wall0, foot[1]-2*wall0];
 
-    // token well dimensions
-    length = (well[0] - wall0) / 2;
-    width = (well[1] - length - 2*wall0) / 2;
-    mid = (well[0] - 2*width - 2*wall0);
-    echo(length, width, mid);
+    // token well dimensions (radial version)
+    yside = 0;
+    xside = well[0]/2 + wall0/2;
+    ytop = well[1]/2 + wall0/2;
+    xtop = ytop * tan(30);
+    ymid = Rhex * sin(60);
+    xmid = Rhex * cos(60);
+    echo([xside, yside], [xtop, ytop]);
+    pside = [
+        [Rhex, 0], [xside, yside], [xside, ytop], [xtop, ytop], [xmid, ymid]
+    ];
+    ptop = [[xmid, ymid], [xtop, ytop], [-xtop, ytop], [-xmid, ymid]];
+    function area(x, y) = (x-wall0) * (y-wall0);
 
-    vend = [length, width];
-    vside = [width, length];
-    vmid = [mid, length];
-    echo(vend, vside, vmid);
+    module well_poly(scale=[1,1]) {
+        linear_extrude(Vblock[2])
+            offset(r=rint) offset(r=-wall0/2-rint) scale(scale) children();
+    }
 
     origin = center ? [0, 0] : foot/2;
     translate(origin) {
-        %raise(Hshelf+Hboard/2) button_tile(center=true);
+        *raise(Hshelf+Hboard/2) button_tile(center=true);
+        %rotate(90) raise(Hshelf+Hboard/2) button_tile(center=true);
         color(color) difference() {
             // shell
             linear_extrude(Vblock[2]) rounded_square(rext, foot);
             // tile shelf
             raise(Hshelf) linear_extrude(Vblock[2])
                 rounded_square(rint, well);
+            // token wells
             raise() {
-                // center well
-                linear_extrude(Vblock[2]) rounded_square(rint, vmid);
-                // edge wells
-                for (i=[-1,+1]) translate([i*(well[0]-vside[0]), 0]/2)
-                    linear_extrude(Vblock[2]) rounded_square(rint, vside);
-                // corner wells
-                for (j=[-1,+1]) for (i=[-1,+1])
-                    translate([i*(well[0]-vend[0]), j*(well[1]-vend[1])]/2)
-                    linear_extrude(Vblock[2]) rounded_square(rint, vend);
+                well_poly() hex_poly(center=true);
+                well_poly([+1, +1]) polygon(pside);
+                well_poly([-1, +1]) polygon(pside);
+                well_poly([+1, -1]) polygon(pside);
+                well_poly([-1, -1]) polygon(pside);
+                well_poly([+1, +1]) polygon(ptop);
+                well_poly([+1, -1]) polygon(ptop);
             }
         }
     }
