@@ -265,8 +265,9 @@ module button_tile(center=false) {
     translate(origin) hex_tile(r=Rbighex, center=true);
 }
 module button_tile_tray(color=undef, center=false) {
-    rint = 2*gap0;  // single gap is too snug
+    rint = 2 * gap0;  // single gap is too snug
     rext = rint + wall0;
+    groove = Hgroove + layer_height;  // compensate for rough print bridges
     origin = center ? [0, 0, 0] : [Rbighex + rext, sin(60)*Rbighex + rext, 0];
     translate(origin) {
         %raise(floor0+Hboard/2) button_tile(center=true);
@@ -283,7 +284,7 @@ module button_tile_tray(color=undef, center=false) {
                     offset(r=rext) hex_poly(r=2/3*Rbighex, center=true);
                 // grooves
                 for (a=[0:60:120]) rotate(a)
-                    cube([3*Rbighex, wall0+2*gap0, 2*Hgroove], center=true);
+                    cube([3*Rbighex, wall0+2*gap0, 2*groove], center=true);
             }
         }
     }
