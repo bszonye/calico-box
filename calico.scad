@@ -265,7 +265,7 @@ module button_tile(center=false) {
     translate(origin) hex_tile(r=Rbighex, center=true);
 }
 module button_tile_tray(color=undef, center=false) {
-    rint = gap0;
+    rint = 2*gap0;  // single gap is too snug
     rext = rint + wall0;
     origin = center ? [0, 0, 0] : [Rbighex + rext, sin(60)*Rbighex + rext, 0];
     translate(origin) {
@@ -280,7 +280,7 @@ module button_tile_tray(color=undef, center=false) {
                     offset(r=rint) hex_poly(r=Rbighex, center=true);
                 // center cut-out
                 linear_extrude(Vblock[2], center=true)
-                    offset(r=wall0) hex_poly(r=Rbighex/2, center=true);
+                    offset(r=rext) hex_poly(r=2/3*Rbighex, center=true);
                 // grooves
                 for (a=[0:60:120]) rotate(a)
                     cube([3*Rbighex, wall0+2*gap0, 2*Hgroove], center=true);
