@@ -53,9 +53,22 @@ inch = 25.4;
 
 // box metrics
 interior = [231, 231, 67.5];  // box interior
-module interior(a=0, center=false) {
-    origin = [0, 0, center ? 0 : interior[2]/2];
-    translate(origin) rotate(a) cube(interior, center=true);
+module box(size, wall=1, frame=false, a=0, center=false) {
+    vint = is_list(size) ? size : [size, size, size];
+    vext = [vint[0] + 2*wall, vint[1] + 2*wall, vint[2] + wall];
+    vcut = [vint[0], vint[1], vint[2] - wall];
+    origin = center ? [0, 0, vext[2]/2 - wall] : vext/2;
+    translate(origin) rotate(a) {
+        difference() {
+            cube(vext, center=true);  // exterior
+            raise(wall/2) cube(vint, center=true);  // interior
+            raise(2*wall) cube(vcut, center=true);  // top cut
+            if (frame) {
+                for (n=[0:2]) for (i=[-1,+1])
+                    translate(2*i*unit_axis(n)*wall) cube(vcut, center=true);
+            }
+        }
+    }
 }
 
 // component metrics
@@ -84,6 +97,7 @@ Hchamfer = (Rlid-Rplug) * tan(Alid);
 Vblock = [92.5, (interior[1]-1) / 4, floor(Hroom / 2)];
 Hrecess = clayer(Hboard+gap0);  // depth of tile recess
 Hshelf = Vblock[2] - Hrecess;
+Hgroove = flayer(floor0/2);  // depth of tier alignment grooves
 
 Ghex = [[1, 0], [0.5, 1], [-0.5, 1], [-1, 0], [-0.5, -1], [0.5, -1]];
 function hex_grid(x, y, r=Rhex) = [r*x, sin(60)*r*y];
@@ -225,7 +239,7 @@ module cat_tile_box(color=undef, center=false) {
         *translate([0, -lip/2, Hshelf]) cat_tile(tray=true, center=true);
         %translate([0, -lip/2, Hshelf]) cat_tile(center=true);
         color(color) difference() {
-            // shell
+            // exterior
             linear_extrude(Vblock[2]) rounded_square(rext, foot);
             // interior
             for (i=[-1,+1]) translate([i*(well[0]+wall0)/2, 0, floor0])
@@ -247,8 +261,32 @@ module cat_tile_box(color=undef, center=false) {
 }
 
 module button_tile(center=false) {
-    origin = center ? [0, 0] : [sin(60)*Rbighex, Rbighex];
-    translate(origin) rotate(90) hex_tile(r=Rbighex, center=true);
+    origin = center ? [0, 0, 0] : [sin(60)*Rbighex, Rbighex, Hboard/2];
+    translate(origin) hex_tile(r=Rbighex, center=true);
+}
+module button_tile_tray(color=undef, center=false) {
+    rint = gap0;
+    rext = rint + wall0;
+    origin = center ? [0, 0, 0] : [Rbighex + rext, sin(60)*Rbighex + rext, 0];
+    translate(origin) {
+        %raise(floor0+Hboard/2) button_tile(center=true);
+        color(color) {
+            difference() {
+                // exterior
+                linear_extrude(Hrecess + floor0)
+                    offset(r=rext) hex_poly(r=Rbighex, center=true);
+                // interior
+                raise(floor0) linear_extrude(Hrecess + floor0)
+                    offset(r=rint) hex_poly(r=Rbighex, center=true);
+                // center cut-out
+                linear_extrude(Vblock[2], center=true)
+                    offset(r=wall0) hex_poly(r=Rbighex/2, center=true);
+                // grooves
+                for (a=[0:60:120]) rotate(a)
+                    cube([3*Rbighex, wall0+2*gap0, 2*Hgroove], center=true);
+            }
+        }
+    }
 }
 
 module button_box(color=undef, center=false) {
@@ -257,15 +295,16 @@ module button_box(color=undef, center=false) {
     rint = rext - wall0;
     well = [foot[0]-2*wall0, foot[1]-2*wall0];
 
-    // token well dimensions (radial version)
+    // token well dimensions
+    rmid = Rhex - wall0/2;  // align outside of wall to hex tile
     yside = 0;
     xside = well[0]/2 + wall0/2;
     yend = well[1]/2 + wall0/2;
     xend = yend * tan(30);
-    ymid = Rhex * sin(60);
-    xmid = Rhex * cos(60);
+    ymid = rmid * sin(60);
+    xmid = rmid * cos(60);
     pside = [
-        [Rhex, 0], [xside, yside], [xside, yend], [xend, yend], [xmid, ymid]
+        [rmid, 0], [xside, yside], [xside, yend], [xend, yend], [xmid, ymid]
     ];
     pend = [[xmid, ymid], [xend, yend], [-xend, yend], [-xmid, ymid]];
 
@@ -277,41 +316,49 @@ module button_box(color=undef, center=false) {
     origin = center ? [0, 0] : foot/2;
     translate(origin) {
         *raise(Hshelf+Hboard/2) button_tile(center=true);
-        %rotate(90) raise(Hshelf+Hboard/2) button_tile(center=true);
-        color(color) difference() {
-            // shell
-            linear_extrude(Vblock[2]) rounded_square(rext, foot);
-            // scoring tile recess
-            raise(Hshelf) cylinder(Hrecess/sin(60), Rbighex, Rbighex+Hrecess);
-            // token wells
-            raise() {
-                well_poly() hex_poly(center=true);
-                well_poly([+1, +1]) polygon(pside);
-                well_poly([-1, +1]) polygon(pside);
-                well_poly([+1, -1]) polygon(pside);
-                well_poly([-1, -1]) polygon(pside);
-                well_poly([+1, +1]) polygon(pend);
-                well_poly([+1, -1]) polygon(pend);
+        color(color) {
+            difference() {
+                // shell
+                linear_extrude(Vblock[2]) rounded_square(rext, foot);
+                // scoring tile recess
+                raise(Hshelf-floor0+Hgroove)
+                    linear_extrude(Vblock[2]) rounded_square(rext, well);
+                // token wells
+                raise() {
+                    well_poly() hex_poly(r=rmid, center=true);
+                    well_poly([+1, +1]) polygon(pside);
+                    well_poly([-1, +1]) polygon(pside);
+                    well_poly([+1, -1]) polygon(pside);
+                    well_poly([-1, -1]) polygon(pside);
+                    well_poly([+1, +1]) polygon(pend);
+                    well_poly([+1, -1]) polygon(pend);
+                }
             }
+            // center well bump
+            rbump = rmid - wall0/2 - 2*Hboard;  // 2 tiles thick from wall
+            rbump0 = rbump + floor0;  // 45 degrees through floor
+            rbump1 = rbump - Hboard;  // 45 degrees above floor
+            linear_extrude(floor0+Hboard, scale=rbump1/rbump0)
+                hex_poly(r=rbump0, center=true);
         }
     }
 }
 
 // complete organizer
-union() {
-    %color("gray", 0.1) interior();
-    translate([0, (Vmat[1]-interior[1])/2, 0]) {
-        raise(0.5*Vmat[2]) color("#ffffc0") cube(Vmat, center=true);
-        raise(1.5*Vmat[2]) color("#c0ffc0") cube(Vmat, center=true);
-        raise(2.5*Vmat[2]) color("#d0e0ff") cube(Vmat, center=true);
-        raise(3.5*Vmat[2]) color("#e0c0ff") cube(Vmat, center=true);
+module organizer() {
+    %color("gold", 0.5) box(interior, frame=true, center=true);
+    %translate([0, (Vmat[1]-interior[1])/2, 0]) {
+        raise(0.5*Vmat[2]) color("#ffffc0", 0.5) cube(Vmat, center=true);
+        raise(1.5*Vmat[2]) color("#c0ffc0", 0.5) cube(Vmat, center=true);
+        raise(2.5*Vmat[2]) color("#d0e0ff", 0.5) cube(Vmat, center=true);
+        raise(3.5*Vmat[2]) color("#e0c0ff", 0.5) cube(Vmat, center=true);
     }
 
     translate([interior[0]/4, Vmat[1]/2, 0]) {
-        color("purple") hex_box_tray(center=true);
+        color("mediumpurple") hex_box_tray(center=true);
         // stack of hex boxes
         raise(floor0+xstack[2]/2) rotate([0, 90, 0]) raise(-xstack[0]/2) {
-            colors = ["darkviolet", "blue", "green", "yellow", "#202020"];
+            colors = ["#6000c0", "blue", "green", "yellow", "#202020"];
             for (i=[0:Nplayers]) {
                 raise_lid(i) color(colors[i]) tile_hex_box(center=true);
             }
@@ -320,20 +367,24 @@ union() {
     }
     rotate(90) translate([(Vblock[0]-interior[0])/2, 0, Hmats]) {
         translate([0, -Vblock[1]*3/2]) {
-            cat_tile_box(color="#202020", center=true);
+            cat_tile_box(color="orange", center=true);
             raise(Vblock[2])
-                cat_tile_box(color="#202020", center=true);
+                cat_tile_box(color="orange", center=true);
         }
         translate([0, -Vblock[1]*1/2])
             cat_tile_box(color="ivory", center=true);
         translate([0, +Vblock[1]*1/2])
             cat_tile_box(color="ivory", center=true);
         translate([0, +Vblock[1]*3/2]) {
-            cat_tile_box(color="orange", center=true);
+            cat_tile_box(color="#202020", center=true);
             raise(Vblock[2])
-                cat_tile_box(color="orange", center=true);
+                cat_tile_box(color="#202020", center=true);
         }
-        raise(Vblock[2]) button_box("purple", center=true);
+        raise(Vblock[2]) {
+            button_box("mediumpurple", center=true);
+            raise(Hshelf-floor0)
+                button_tile_tray("mediumpurple", center=true);
+        }
     }
 }
 
@@ -343,3 +394,13 @@ union() {
 *hex_box_tray(center=true);
 *cat_tile_box(center=true);
 *button_box(center=true);
+*button_tile_tray(center=true);
+
+organizer();
+
+// prototypes
+*intersection() {
+    button_box(center=true);
+    linear_extrude(Vblock[2]) offset(r=2.7-wall0) offset(r=wall0-2.7)
+        hex_poly(center=true);
+}
